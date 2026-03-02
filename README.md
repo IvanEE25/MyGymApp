@@ -30,7 +30,7 @@ The application is fully localized and supports:
 
 🇪🇪 Estonian
 
-🛠 Tech Stack
+Tech Stack
 Framework: React Native (Expo)
 
 Storage: AsyncStorage for local data persistence
