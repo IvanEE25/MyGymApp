@@ -1,5 +1,5 @@
 # MyGymApp
-Advanced strength training diary for breaking plateaus through systematic periodization. Features automated load tracking, a 1RM calculator, and full customization. Multilingual support: EN, UA, RU, ET. Built with React Native &amp; Expo.
+Advanced strength training diary for breaking plateaus through systematic periodization. Features automated load tracking, a 1RM calculator, and full customization. Multilingual support: EN, UA, RU, ET. Built with React Native & Expo.
 
 MyGymApp: Strength Periodization & Plateau Breaker
 Gym Logic Pro is a high-performance training diary designed specifically for advanced athletes. It focuses on overcoming strength plateaus using scientifically-backed periodization methods. Instead of random lifting, the app calculates precise loads to ensure systematic progress.
@@ -45,3 +45,6 @@ Stage 1: 4 weeks of increasing intensity (e.g., 70% ➔ 85% of 1RM).
 Deload: The 4th week reduces volume to allow CNS recovery.
 
 Stage 2: Automatically adds a fixed weight (e.g., +5kg) to the previous cycle to force adaptation.
+
+![photo_4_2026-03-02_15-27-14](https://github.com/user-attachments/assets/f5f6ce20-97f5-49b3-913b-5956c2e8f2d4)
+
