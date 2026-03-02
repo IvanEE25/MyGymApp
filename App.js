@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Modal, Alert, StatusBar, KeyboardAvoidingView, Platform,
-  useWindowDimensions
+  TextInput, Modal, Alert, StatusBar, KeyboardAvoidingView, Platform, SafeAreaView
 } from 'react-native';
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // --- 1. СЛОВАРЬ ПЕРЕВОДОВ ---
 const TRANSLATIONS = {
@@ -44,6 +41,7 @@ const TRANSLATIONS = {
     done: "Готово",
     lang_select: "Выберите язык / Select Language",
 
+    // help text
     intensity_title: "Интенсивность",
     intensity_desc:
       "• Лёгкая — меньше повторений, больше вес. Подходит для силы.\n" +
@@ -54,6 +52,7 @@ const TRANSLATIONS = {
       "1ПМ — максимальный вес на 1 повтор с правильной техникой. " +
       "Если не знаете свой 1ПМ, посчитайте его в калькуляторе по формуле Эпли.",
 
+    // 1RM calculator
     calc_open: "Калькулятор 1ПМ",
     calc_title: "Калькулятор 1ПМ",
     calc_formula: "Формула Эпли: 1ПМ = (M × k) / 30 + M",
@@ -282,32 +281,7 @@ const sanitizeIntInput = (raw, max = 30) => {
   if (!Number.isFinite(n)) return '';
   return String(clamp(n, 1, max));
 };
-const confirmDialog = (title, message, onConfirm, t) => {
-  // WEB: нормальный confirm с кнопками
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const ok = window.confirm(`${title}\n\n${message}`);
-    if (ok) onConfirm();
-    return;
-  }
 
-  // iOS/Android: обычный Alert.alert с кнопками
-  Alert.alert(title, message, [
-    { text: t('cancel'), style: 'cancel' },
-    { text: t('delete'), style: 'destructive', onPress: onConfirm },
-  ]);
-};
-
-const alertWithOk = (title, message, onOk, t) => {
-  // WEB
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.alert(`${title}\n\n${message}`);
-    if (onOk) onOk();
-    return;
-  }
-
-  // iOS/Android
-  Alert.alert(title, message, [{ text: t('ok'), onPress: onOk }]);
-};
 export default function App() {
   const [lang, setLang] = useState('ru');
   const t = (key) => (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) ? TRANSLATIONS[lang][key] : key;
@@ -315,9 +289,6 @@ export default function App() {
   const isCyrillic = lang === 'ru' || lang === 'uk';
   const unitKg = isCyrillic ? 'кг' : 'kg';
   const rmShort = isCyrillic ? '1ПМ' : '1RM';
-
-  const { width } = useWindowDimensions();
-  const isDesktopWeb = Platform.OS === 'web' && width >= 768;
 
   const [days, setDays] = useState([]);
   const [exercises, setExercises] = useState([]);
@@ -338,18 +309,6 @@ export default function App() {
   const [newEx, setNewEx] = useState({ name: '', oneRM: '', intensity: 'mid', dayId: '' });
 
   useEffect(() => { loadData(); }, []);
-
-  // Web: блокируем скролл страницы под модалкой
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    if (typeof document === 'undefined') return;
-
-    const anyModalOpen = modalVisible || infoModalVisible || langModalVisible || calcModalVisible;
-    const prev = document.body.style.overflow;
-
-    if (anyModalOpen) document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [modalVisible, infoModalVisible, langModalVisible, calcModalVisible]);
 
   const migrateDays = (loadedDays) => {
     if (!Array.isArray(loadedDays)) return [];
@@ -497,18 +456,17 @@ export default function App() {
   };
 
   const deleteDay = (dayId) => {
-    confirmDialog(
-     t('delete_title'),
-     t('delete_day_confirm'),
-      () => {
-      const updatedDays = days.filter(d => d.id !== dayId);
-      const updatedExercises = exercises.filter(ex => ex.dayId !== dayId);
-      setDays(updatedDays);
-      setExercises(updatedExercises);
-      saveData(updatedExercises, updatedDays);
-      },
-      t
-    );
+    Alert.alert(t('delete_title'), t('delete_day_confirm'), [
+      { text: t('cancel'), style: "cancel" },
+      {
+        text: t('delete'), style: "destructive", onPress: () => {
+          const updatedDays = days.filter(d => d.id !== dayId);
+          const updatedExercises = exercises.filter(ex => ex.dayId !== dayId);
+          setDays(updatedDays); setExercises(updatedExercises);
+          saveData(updatedExercises, updatedDays);
+        }
+      }
+    ]);
   };
 
   const renameDay = (id, newName) => {
@@ -527,14 +485,11 @@ export default function App() {
         if (nWeek > 4) { nWeek = 1; nStage += 1; }
 
         if (nStage > 2) {
-  alertWithOk(
-    t('finish_title'),
-    t('finish_body'),
-    () => editExercise(ex),
-    t
-  );
-  return { ...ex, week: 1, stage: 1 };
-}
+          Alert.alert(t('finish_title'), t('finish_body'), [
+            { text: t('ok'), onPress: () => editExercise(ex) }
+          ]);
+          return { ...ex, week: 1, stage: 1 };
+        }
         return { ...ex, week: nWeek, stage: nStage };
       }
       return ex;
@@ -621,10 +576,11 @@ export default function App() {
     setCalcModalVisible(false);
   };
 
-  const content = !isSetupComplete ? (
-    <SafeAreaView style={[styles.safe, isDesktopWeb && styles.safeDesktop]} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" />
-      <View style={[styles.shell, isDesktopWeb && styles.shellDesktop]}>
+  // --- SETUP SCREEN ---
+  if (!isSetupComplete) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" />
         <View style={styles.setupWrap}>
           <Text style={styles.setupTitle}>{t('setup_title')}</Text>
 
@@ -645,8 +601,7 @@ export default function App() {
             <Text style={styles.setupHint}>{t('how_many_days')}</Text>
             <TextInput
               style={styles.input}
-              keyboardType="number-pad"
-              inputMode={Platform.OS === 'web' ? 'numeric' : undefined}
+              keyboardType="numeric"
               placeholder={t('how_many_days')}
               placeholderTextColor={stylesVars.muted2}
               onChangeText={v => {
@@ -677,317 +632,279 @@ export default function App() {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-    </SafeAreaView>
-  ) : (
-    <SafeAreaView style={[styles.safe, isDesktopWeb && styles.safeDesktop]} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" />
-      <View style={[styles.shell, isDesktopWeb && styles.shellDesktop]}>
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerKicker}>{t('app_title')}</Text>
-          </View>
+      </SafeAreaView>
+    );
+  }
 
-          <View style={styles.headerActions}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.headerChip} onPress={() => setLangModalVisible(true)}>
-              <Text style={styles.headerChipText}>{lang.toUpperCase()}</Text>
+  // --- MAIN UI ---
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerKicker}>{t('app_title')}</Text>
+        </View>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity activeOpacity={0.85} style={styles.headerChip} onPress={() => setLangModalVisible(true)}>
+            <Text style={styles.headerChipText}>{lang.toUpperCase()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.85} style={styles.headerChip} onPress={() => setInfoModalVisible(true)}>
+            <Text style={styles.headerChipText}>?</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 110 }}>
+        {days.map((dayObj) => (
+          <View key={dayObj.id} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.dayTitleWrap}>
+                <TextInput
+                  style={styles.dayTitleInput}
+                  value={dayObj.name}
+                  onChangeText={(text) => renameDay(dayObj.id, text)}
+                  placeholder={t('rename_placeholder')}
+                  placeholderTextColor={stylesVars.muted2}
+                />
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => deleteDay(dayObj.id)}
+                style={styles.iconDanger}
+              >
+                <Text style={styles.iconDangerText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {exercises.filter(ex => ex.dayId === dayObj.id).map(ex => {
+              const intensityKey = normalizeIntensity(ex.intensity);
+              return (
+                <View key={ex.id} style={styles.exerciseCard}>
+                  <TouchableOpacity activeOpacity={0.85} style={{ flex: 1 }} onPress={() => editExercise(ex)}>
+                    <Text style={styles.exName} numberOfLines={1}>{ex.name}</Text>
+                    <Text style={styles.exMeta}>
+                      {t('stage')}{ex.stage} • {t('week')}{ex.week} • {t(intensityKey)}
+                    </Text>
+                    <Text style={styles.exSub}>{ex.oneRM} {unitKg} • {rmShort}</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.rightBox}>
+                    <Text style={styles.weightText}>{calculateWeight(ex)} {unitKg}</Text>
+                    <Text style={styles.repsText}>{calculateSets(ex)} × {calculateReps(ex)}</Text>
+
+                    <View style={styles.actionRow}>
+                      <TouchableOpacity activeOpacity={0.85} onPress={() => handleStepBack(ex.id)} style={styles.smallBtn}>
+                        <Text style={styles.smallBtnText}>←</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity activeOpacity={0.85} onPress={() => handleComplete(ex.id)} style={styles.smallBtnDone}>
+                        <Text style={styles.smallBtnDoneText}>{t('done')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.addInlineBtn}
+              onPress={() => {
+                setEditMode(false);
+                setCurrentEditingId(null);
+                setNewEx({ name: '', oneRM: '', intensity: 'mid', dayId: dayObj.id });
+                setModalVisible(true);
+              }}
+            >
+              <Text style={styles.addInlineText}>{t('add_exercise')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.85} style={styles.headerChip} onPress={() => setInfoModalVisible(true)}>
-              <Text style={styles.headerChipText}>?</Text>
+          </View>
+        ))}
+
+        {days.length < 7 && (
+          <TouchableOpacity activeOpacity={0.85} style={styles.addDayBtn} onPress={addDay}>
+            <Text style={styles.addDayBtnText}>{t('add_day')}</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      {/* INFO MODAL */}
+      <Modal visible={infoModalVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('logic_title')}</Text>
+
+            <ScrollView style={{ maxHeight: 420 }}>
+              <Text style={styles.infoTitle}>{t('intensity_title')}</Text>
+              <Text style={styles.infoText}>{t('intensity_desc')}</Text>
+
+              <Text style={styles.infoTitle}>{t('one_rm_title')}</Text>
+              <Text style={styles.infoText}>{t('one_rm_desc')}</Text>
+            </ScrollView>
+
+            <TouchableOpacity activeOpacity={0.85} style={[styles.primaryBtn, { marginTop: 14 }]} onPress={() => setInfoModalVisible(false)}>
+              <Text style={styles.primaryBtnText}>{t('understood')}</Text>
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={{ paddingBottom: 110 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {days.map((dayObj) => (
-            <View key={dayObj.id} style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.dayTitleWrap}>
-                  <TextInput
-                    style={styles.dayTitleInput}
-                    value={dayObj.name}
-                    onChangeText={(text) => renameDay(dayObj.id, text)}
-                    placeholder={t('rename_placeholder')}
-                    placeholderTextColor={stylesVars.muted2}
-                  />
-                </View>
+      {/* LANGUAGE MODAL */}
+      <Modal visible={langModalVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('lang_select')}</Text>
 
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => deleteDay(dayObj.id)}
-                  style={styles.iconDanger}
-                >
-                  <Text style={styles.iconDangerText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              {exercises.filter(ex => ex.dayId === dayObj.id).map(ex => {
-                const intensityKey = normalizeIntensity(ex.intensity);
-                return (
-                  <View key={ex.id} style={styles.exerciseCard}>
-                    <TouchableOpacity activeOpacity={0.85} style={{ flex: 1 }} onPress={() => editExercise(ex)}>
-                      <Text style={styles.exName} numberOfLines={1}>{ex.name}</Text>
-                      <Text style={styles.exMeta}>
-                        {t('stage')}{ex.stage} • {t('week')}{ex.week} • {t(intensityKey)}
-                      </Text>
-                      <Text style={styles.exSub}>{ex.oneRM} {unitKg} • {rmShort}</Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.rightBox}>
-                      <Text style={styles.weightText}>{calculateWeight(ex)} {unitKg}</Text>
-                      <Text style={styles.repsText}>{calculateSets(ex)} × {calculateReps(ex)}</Text>
-
-                      <View style={styles.actionRow}>
-                        <TouchableOpacity activeOpacity={0.85} onPress={() => handleStepBack(ex.id)} style={styles.smallBtn}>
-                          <Text style={styles.smallBtnText}>←</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity activeOpacity={0.85} onPress={() => handleComplete(ex.id)} style={styles.smallBtnDone}>
-                          <Text style={styles.smallBtnDoneText}>{t('done')}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })}
-
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.addInlineBtn}
-                onPress={() => {
-                  setEditMode(false);
-                  setCurrentEditingId(null);
-                  setNewEx({ name: '', oneRM: '', intensity: 'mid', dayId: dayObj.id });
-                  setModalVisible(true);
-                }}
-              >
-                <Text style={styles.addInlineText}>{t('add_exercise')}</Text>
+            <View style={{ gap: 10 }}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('uk')}>
+                <Text style={styles.langFullText}>Українська 🇺🇦</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('ru')}>
+                <Text style={styles.langFullText}>Парашный</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('en')}>
+                <Text style={styles.langFullText}>English 🇺🇸</Text>
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('et')}>
+                <Text style={styles.langFullText}>Eesti 🇪🇪</Text>
               </TouchableOpacity>
             </View>
-          ))}
 
-          {days.length < 7 && (
-            <TouchableOpacity activeOpacity={0.85} style={styles.addDayBtn} onPress={addDay}>
-              <Text style={styles.addDayBtnText}>{t('add_day')}</Text>
+            <TouchableOpacity activeOpacity={0.85} style={{ marginTop: 14 }} onPress={() => setLangModalVisible(false)}>
+              <Text style={styles.linkText}>{t('cancel')}</Text>
             </TouchableOpacity>
-          )}
-        </ScrollView>
-
-        {/* INFO MODAL */}
-        <Modal visible={infoModalVisible} animationType="fade" transparent={true}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <ScrollView
-                style={{ maxHeight: 560 }}
-                contentContainerStyle={{ paddingBottom: 8 }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                <Text style={styles.modalTitle}>{t('logic_title')}</Text>
-
-                <Text style={styles.infoTitle}>{t('intensity_title')}</Text>
-                <Text style={styles.infoText}>{t('intensity_desc')}</Text>
-
-                <Text style={styles.infoTitle}>{t('one_rm_title')}</Text>
-                <Text style={styles.infoText}>{t('one_rm_desc')}</Text>
-
-                <TouchableOpacity activeOpacity={0.85} style={[styles.primaryBtn, { marginTop: 14 }]} onPress={() => setInfoModalVisible(false)}>
-                  <Text style={styles.primaryBtnText}>{t('understood')}</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
           </View>
-        </Modal>
+        </View>
+      </Modal>
 
-        {/* LANGUAGE MODAL */}
-        <Modal visible={langModalVisible} animationType="fade" transparent={true}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <ScrollView
-                style={{ maxHeight: 560 }}
-                contentContainerStyle={{ paddingBottom: 8 }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                <Text style={styles.modalTitle}>{t('lang_select')}</Text>
+      {/* ADD / EDIT EXERCISE MODAL */}
+      <Modal visible={modalVisible} animationType="slide" transparent={true}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{editMode ? t('edit') : t('add')}</Text>
 
-                <View style={{ gap: 10 }}>
-                  <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('uk')}>
-                    <Text style={styles.langFullText}>Українська 🇺🇦</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('ru')}>
-                    <Text style={styles.langFullText}>Парашный</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('en')}>
-                    <Text style={styles.langFullText}>English 🇺🇸</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity activeOpacity={0.85} style={styles.langFullBtn} onPress={() => changeLanguage('et')}>
-                    <Text style={styles.langFullText}>Eesti 🇪🇪</Text>
-                  </TouchableOpacity>
-                </View>
+            <Text style={styles.fieldLabel}>{t('ex_name')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('ex_name')}
+              placeholderTextColor={stylesVars.muted2}
+              value={newEx.name}
+              onChangeText={v => setNewEx({ ...newEx, name: v })}
+            />
 
-                <TouchableOpacity activeOpacity={0.85} style={{ marginTop: 14 }} onPress={() => setLangModalVisible(false)}>
-                  <Text style={styles.linkText}>{t('cancel')}</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+            <Text style={styles.fieldLabel}>{t('one_rm')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('one_rm')}
+              placeholderTextColor={stylesVars.muted2}
+              keyboardType="numeric"
+              value={String(newEx.oneRM ?? '')}
+              onChangeText={(v) => {
+                const clean = sanitizeDecimalInput(v, 1000);
+                setNewEx({ ...newEx, oneRM: clean });
+              }}
+            />
 
-        {/* ADD / EDIT EXERCISE MODAL */}
-        <Modal visible={modalVisible} animationType="slide" transparent={true}>
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <ScrollView
-                style={{ maxHeight: 560 }}
-                contentContainerStyle={{ paddingBottom: 8 }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-              >
-                <Text style={styles.modalTitle}>{editMode ? t('edit') : t('add')}</Text>
+            <TouchableOpacity activeOpacity={0.85} style={styles.secondaryBtn} onPress={openCalc}>
+              <Text style={styles.secondaryBtnText}>{t('calc_open')}</Text>
+            </TouchableOpacity>
 
-                <Text style={styles.fieldLabel}>{t('ex_name')}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('ex_name')}
-                  placeholderTextColor={stylesVars.muted2}
-                  value={newEx.name}
-                  onChangeText={v => setNewEx({ ...newEx, name: v })}
-                />
-
-                <Text style={styles.fieldLabel}>{t('one_rm')}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('one_rm')}
-                  placeholderTextColor={stylesVars.muted2}
-                  keyboardType={Platform.OS === 'ios' ? 'decimal-pad' : 'numeric'}
-                  inputMode={Platform.OS === 'web' ? 'decimal' : undefined}
-                  value={String(newEx.oneRM ?? '')}
-                  onChangeText={(v) => {
-                    const clean = sanitizeDecimalInput(v, 1000);
-                    setNewEx({ ...newEx, oneRM: clean });
-                  }}
-                />
-
-                <TouchableOpacity activeOpacity={0.85} style={styles.secondaryBtn} onPress={openCalc}>
-                  <Text style={styles.secondaryBtnText}>{t('calc_open')}</Text>
-                </TouchableOpacity>
-
-                <View style={styles.segmentRow}>
-                  {['low', 'mid', 'high'].map(l => {
-                    const active = normalizeIntensity(newEx.intensity) === l;
-                    return (
-                      <TouchableOpacity
-                        key={l}
-                        activeOpacity={0.85}
-                        style={[styles.segmentBtn, active && styles.segmentBtnActive]}
-                        onPress={() => setNewEx({ ...newEx, intensity: l })}
-                      >
-                        <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{t(l)}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <TouchableOpacity activeOpacity={0.85} style={styles.primaryBtn} onPress={addOrUpdateExercise}>
-                  <Text style={styles.primaryBtnText}>{t('save')}</Text>
-                </TouchableOpacity>
-
-                {editMode && (
+            <View style={styles.segmentRow}>
+              {['low', 'mid', 'high'].map(l => {
+                const active = normalizeIntensity(newEx.intensity) === l;
+                return (
                   <TouchableOpacity
+                    key={l}
                     activeOpacity={0.85}
-                    style={{ marginTop: 12 }}
-                    onPress={() => {
-                      const updated = exercises.filter(ex => ex.id !== currentEditingId);
-                      setExercises(updated);
-                      saveData(updated, days);
-                      closeModal();
-                    }}
+                    style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                    onPress={() => setNewEx({ ...newEx, intensity: l })}
                   >
-                    <Text style={styles.dangerLink}>{t('delete_ex')}</Text>
+                    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{t(l)}</Text>
                   </TouchableOpacity>
-                )}
-
-                <TouchableOpacity activeOpacity={0.85} onPress={closeModal} style={{ marginTop: 12 }}>
-                  <Text style={styles.linkText}>{t('cancel')}</Text>
-                </TouchableOpacity>
-              </ScrollView>
+                );
+              })}
             </View>
-          </KeyboardAvoidingView>
-        </Modal>
 
-        {/* 1RM CALCULATOR MODAL */}
-        <Modal visible={calcModalVisible} animationType="fade" transparent={true}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.modalOverlay}
-          >
-            <View style={styles.modalCard}>
-              <ScrollView
-                style={{ maxHeight: 560 }}
-                contentContainerStyle={{ paddingBottom: 8 }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
+            <TouchableOpacity activeOpacity={0.85} style={styles.primaryBtn} onPress={addOrUpdateExercise}>
+              <Text style={styles.primaryBtnText}>{t('save')}</Text>
+            </TouchableOpacity>
+
+            {editMode && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={{ marginTop: 12 }}
+                onPress={() => {
+                  const updated = exercises.filter(ex => ex.id !== currentEditingId);
+                  setExercises(updated);
+                  saveData(updated, days);
+                  closeModal();
+                }}
               >
-                <Text style={styles.modalTitle}>{t('calc_title')}</Text>
-                <Text style={styles.hintText}>{t('calc_formula')}</Text>
-                <Text style={styles.hintTextSmall}>{t('calc_limit')}</Text>
+                <Text style={styles.dangerLink}>{t('delete_ex')}</Text>
+              </TouchableOpacity>
+            )}
 
-                <Text style={styles.fieldLabel}>{t('calc_weight')}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('calc_weight')}
-                  placeholderTextColor={stylesVars.muted2}
-                  keyboardType={Platform.OS === 'ios' ? 'decimal-pad' : 'numeric'}
-                  inputMode={Platform.OS === 'web' ? 'decimal' : undefined}
-                  value={calcM}
-                  onChangeText={(v) => setCalcM(sanitizeDecimalInput(v, 1000))}
-                />
+            <TouchableOpacity activeOpacity={0.85} onPress={closeModal} style={{ marginTop: 12 }}>
+              <Text style={styles.linkText}>{t('cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
-                <Text style={styles.fieldLabel}>{t('calc_reps')}</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={t('calc_reps')}
-                  placeholderTextColor={stylesVars.muted2}
-                  keyboardType="number-pad"
-                  inputMode={Platform.OS === 'web' ? 'numeric' : undefined}
-                  value={calcK}
-                  onChangeText={(v) => setCalcK(sanitizeIntInput(v, 30))}
-                />
+      {/* 1RM CALCULATOR MODAL */}
+      <Modal visible={calcModalVisible} animationType="fade" transparent={true}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('calc_title')}</Text>
+            <Text style={styles.hintText}>{t('calc_formula')}</Text>
+            <Text style={styles.hintTextSmall}>{t('calc_limit')}</Text>
 
-                <TouchableOpacity activeOpacity={0.85} style={styles.primaryBtn} onPress={calcOneRM}>
-                  <Text style={styles.primaryBtnText}>{t('calc_calculate')}</Text>
+            <Text style={styles.fieldLabel}>{t('calc_weight')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('calc_weight')}
+              placeholderTextColor={stylesVars.muted2}
+              keyboardType="numeric"
+              value={calcM}
+              onChangeText={(v) => setCalcM(sanitizeDecimalInput(v, 1000))}
+            />
+
+            <Text style={styles.fieldLabel}>{t('calc_reps')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('calc_reps')}
+              placeholderTextColor={stylesVars.muted2}
+              keyboardType="numeric"
+              value={calcK}
+              onChangeText={(v) => setCalcK(sanitizeIntInput(v, 30))}
+            />
+
+            <TouchableOpacity activeOpacity={0.85} style={styles.primaryBtn} onPress={calcOneRM}>
+              <Text style={styles.primaryBtnText}>{t('calc_calculate')}</Text>
+            </TouchableOpacity>
+
+            {calcResult != null && (
+              <View style={{ marginTop: 14 }}>
+                <View style={styles.resultPill}>
+                  <Text style={styles.resultText}>{t('calc_result')}: {calcResult} {unitKg}</Text>
+                </View>
+                <TouchableOpacity activeOpacity={0.85} style={[styles.primaryBtn, { marginTop: 10 }]} onPress={useCalcResult}>
+                  <Text style={styles.primaryBtnText}>{t('calc_use')}</Text>
                 </TouchableOpacity>
+              </View>
+            )}
 
-                {calcResult != null && (
-                  <View style={{ marginTop: 14 }}>
-                    <View style={styles.resultPill}>
-                      <Text style={styles.resultText}>{t('calc_result')}: {calcResult} {unitKg}</Text>
-                    </View>
-                    <TouchableOpacity activeOpacity={0.85} style={[styles.primaryBtn, { marginTop: 10 }]} onPress={useCalcResult}>
-                      <Text style={styles.primaryBtnText}>{t('calc_use')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                <TouchableOpacity activeOpacity={0.85} onPress={() => setCalcModalVisible(false)} style={{ marginTop: 12 }}>
-                  <Text style={styles.linkText}>{t('cancel')}</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
-      </View>
+            <TouchableOpacity activeOpacity={0.85} onPress={() => setCalcModalVisible(false)} style={{ marginTop: 12 }}>
+              <Text style={styles.linkText}>{t('cancel')}</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
-  );
-
-  return (
-    <SafeAreaProvider>
-      {content}
-    </SafeAreaProvider>
   );
 }
 
@@ -1007,30 +924,8 @@ const stylesVars = {
 
 // --- Styles ---
 const ANDROID_TOP = Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0;
-
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: stylesVars.bg,
-    alignItems: 'center', // важно для ПК: центрируем shell
-  },
-
-  safeDesktop: {
-    paddingVertical: 24,
-  },
-
-  shell: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 520, // важно для ПК: не растягиваем на весь экран
-  },
-
-  shellDesktop: {
-    borderWidth: 1,
-    borderColor: stylesVars.border,
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
+  safe: { flex: 1, backgroundColor: stylesVars.bg },
 
   // Setup
   setupWrap: { flex: 1, padding: 20, paddingTop: ANDROID_TOP + 20, justifyContent: 'center' },
@@ -1083,7 +978,7 @@ const styles = StyleSheet.create({
   headerChipText: { color: stylesVars.text, fontWeight: '900', fontSize: 12 },
 
   // Main list
-  scroll: { padding: 16, width: '100%' },
+  scroll: { padding: 16 },
   section: {
     backgroundColor: stylesVars.surface,
     borderRadius: 18,
@@ -1203,7 +1098,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: stylesVars.accent, fontWeight: '900' },
 
-  // Inputs (важно: fontSize 16, чтобы iPhone Safari не делал zoom)
+  // Inputs
   fieldLabel: { color: stylesVars.muted, fontSize: 12, fontWeight: '800', marginBottom: 6, marginLeft: 4 },
   input: {
     backgroundColor: stylesVars.surface2,
@@ -1214,7 +1109,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: stylesVars.border,
-    fontSize: 16,
+    fontSize: 14,
   },
 
   // Segmented control
@@ -1233,25 +1128,13 @@ const styles = StyleSheet.create({
   segmentTextActive: { color: stylesVars.text },
 
   // Modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    padding: 18,
-    alignItems: 'center',
-    ...Platform.select({
-      web: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 },
-      default: {},
-    }),
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 18 },
   modalCard: {
     backgroundColor: stylesVars.surface,
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: stylesVars.border,
-    width: '100%',
-    maxWidth: 520,
   },
   modalTitle: { color: stylesVars.text, fontSize: 18, fontWeight: '900', textAlign: 'center', marginBottom: 12 },
 
