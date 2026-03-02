@@ -46,5 +46,9 @@ Deload: The 4th week reduces volume to allow CNS recovery.
 
 Stage 2: Automatically adds a fixed weight (e.g., +5kg) to the previous cycle to force adaptation.
 
-![photo_4_2026-03-02_15-27-14](https://github.com/user-attachments/assets/f5f6ce20-97f5-49b3-913b-5956c2e8f2d4)
+![photo_2_2026-03-02_15-27-14](https://github.com/user-attachments/assets/cc8f71c8-f0d5-4d96-b1f4-273af6776766)
+![photo_1_2026-03-02_15-27-14](https://github.com/user-attachments/assets/9d599a25-7025-4f8d-a970-cc84cd5c95e6)
+![photo_4_2026-03-02_15-27-14](https://github.com/user-attachments/assets/cf377547-ceec-4614-b9f0-c1447de4d29c)
+![photo_3_2026-03-02_15-27-14](https://github.com/user-attachments/assets/4ee3503a-9d2c-4531-b8ed-f6452fbd8c8b)
+
 
