@@ -1,5 +1,4 @@
-# Gym Diary
-
+# MyGymApp
 A minimalist strength training tracker for Android. The app automatically calculates your working weight for each session based on your 1RM and progresses through a 2-stage × 4-week cycle.
 
 ---
